@@ -14,24 +14,19 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(message)s")
 # MQTT broker configuration
 BROKER_HOST = "mosquitto"
 BROKER_PORT = 1883
-DATA_TOPIC = "factory/machines/data"
+DATA_TOPIC_PREFIX = "factory/machines"
 STATUS_TOPIC = "factory/machines/status"
 
 
-def evaluate_process_health(vibration_data):
-    """Theoretical machine learning model classification."""
-
-    FALSE_POSITIVE_RATE = 0.05  # 5% chance to misclassify a good machine as "bad"
-    FALSE_NEGATIVE_RATE = 0.03  # 3% chance to misclassify a bad machine as "good"
+def evaluate_process_health(vibration_data, label):
+    """Machine learning model classification."""
 
     # Classification based on randomness for simplicity
-    classification = "bad" if random.random() < 0.5 else "good"
-
-    # Introduce false positives and negatives
-    if classification == "good" and random.random() < FALSE_POSITIVE_RATE:
+    if label == "bad":
         return "bad"
-    elif classification == "bad" and random.random() < FALSE_NEGATIVE_RATE:
-        return "good"
+    # i.e. 50% of true good cases are also treated as bad
+    # i.e. wasteful overly cautious classifer
+    classification = "bad" if random.random() < 0.5 else "good"
 
     return classification
 
@@ -53,8 +48,9 @@ def machine_simulation(machine_id):
     # Define anomaly rate
     TRUE_ANOMALY_RATE = 0.01  # For 1%
     # Define wait times
-    MAINTENANCE_TIME = 30  # seconds
-    RELOAD_TIME = 2  # seconds
+    INSPECTION_TIME = 20  # seconds
+    MAINTENANCE_TIME = 60  # seconds
+    RELOAD_TIME = 10  # seconds
 
     # Define the path to the h5 file
     machine_name = f"M0{machine_id + 1}"
@@ -100,12 +96,14 @@ def machine_simulation(machine_id):
                 "vibration_data": data.tolist(),  # Directly using the [x, y, z] array
             }
 
-            publish_mqtt_message(client, DATA_TOPIC, message)
+            publish_mqtt_message(
+                client, f"{DATA_TOPIC_PREFIX}/{machine_name}/data", message
+            )
             relative_timestamp += FREQUENCY_SLEEP_TIME
             time.sleep(FREQUENCY_SLEEP_TIME)
 
         # After data is exhausted, classify using our machine learning model
-        classification_result = evaluate_process_health(data)
+        classification_result = evaluate_process_health(data, label)
 
         publish_mqtt_message(
             client,
@@ -113,6 +111,7 @@ def machine_simulation(machine_id):
             {
                 "machine_id": machine_name,
                 "status": "Completed",
+                "label": label,
                 "classification": classification_result,
             },
         )
@@ -121,7 +120,7 @@ def machine_simulation(machine_id):
             publish_mqtt_message(
                 client,
                 STATUS_TOPIC,
-                {"machine_id": machine_name, "status": "Maintenance Mode"},
+                {"machine_id": machine_name, "status": "Maintenance"},
             )
             time.sleep(MAINTENANCE_TIME)
 
