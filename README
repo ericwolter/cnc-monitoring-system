@@ -1,0 +1,11 @@
+cnc-monitoring-system/
+    data/ - example datasets
+    notebooks/ - Jupyter notebooks for exploration
+    src/ - source code for production system
+        edge/ - edge logic
+        cloud/ - cloud components
+        common/ - shared functionality
+    models/ - trained models
+    docs/ - documentation
+    configs/ - configurations
+    tools/ - scripts for managing the system
