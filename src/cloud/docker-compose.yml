@@ -24,6 +24,7 @@ services:
       KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
       KAFKA_LOG_DIRS: "/var/lib/kafka/data"
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_LOG_RETENTION_HOURS: 1
     ports:
       - "9092:9092"
     volumes:
@@ -60,4 +61,15 @@ services:
     volumes:
       - ../../data:/data
       - ../edge/factory:/app
+    restart: unless-stopped
+
+  dashboard:
+    build: ./dashboard
+    container_name: dashboard
+    ports:
+      - "5000:5000"
+    volumes:
+      - ./dashboard:/app
+    depends_on:
+      - kafka
     restart: unless-stopped
