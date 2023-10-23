@@ -1,0 +1,39 @@
+version: '3'
+
+services:
+  kafka:
+    image: confluentinc/cp-kafka:7.5.1
+    container_name: kafka
+    environment:
+      KAFKA_KRAFT_MODE: "true"
+      KAFKA_KRAFT_BROKER_ID: 1
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+      KAFKA_LISTENERS: PLAINTEXT://:9092
+      KAFKA_LOG_DIRS: "/var/lib/kafka/data"
+    ports:
+      - "9092:9092"
+    volumes:
+      - ./kafka/data:/var/lib/kafka/data
+    restart: unless-stopped
+
+  mosquitto:
+    image: eclipse-mosquitto:2.0.18
+    container_name: mosquitto
+    ports:
+      - "1883:1883" # Non-TLS MQTT
+      - "9001:9001" # WebSockets (if you plan to use it later)
+    volumes:
+      - ./mosquitto/config:/mosquitto/config
+      - ./mosquitto/data:/mosquitto/data
+      - ./mosquitto/log:/mosquitto/log
+    restart: unless-stopped
+
+  factory:
+    build: ../edge/factory
+    container_name: factory
+    depends_on:
+      - mosquitto
+    volumes:
+      - ../../data:/data
+      - ../edge/factory:/app
+    restart: unless-stopped
