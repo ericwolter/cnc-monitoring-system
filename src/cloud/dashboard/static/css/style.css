@@ -1,0 +1,73 @@
+body {
+    font-family: system-ui, "Segoe UI", Roboto, Helvetica, Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol";
+    text-align: center;
+}
+
+h1 {
+    margin: 144px;
+    font-size: 72px;
+}
+
+
+/* Tiled view with flexbox */
+.machines {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 64px;
+    margin: 32px;
+    justify-content: center;
+}
+
+.machine {
+    border: 1px solid #ddd;
+    padding: 32px;
+    border-radius: 8px;
+    width: 200px;
+    text-align: center;
+}
+
+.machine h2 {
+    margin: 0;
+    text-align: center;
+}
+
+.machine img {
+    width: 100%;
+    margin-top: 12px;
+    margin-bottom: 8px;
+}
+
+/* Pill shape for the status */
+.status-pill {
+    display: inline-block;
+    padding: 8px 16px;
+    border-radius: 25px;
+    color: #fff;
+    font-weight: bold;
+    width: 150px;
+}
+
+.maintenance h2 {
+    opacity: 0.5;
+}
+
+.maintenance img {
+    opacity: 0.5;
+}
+
+.maintenance {
+    border-color: #DD3736;
+    border-width: 2px;
+}
+
+.inspection h2 {
+    opacity: 0.75;
+}
+
+.inspection img {
+    opacity: 0.75;
+}
+
+.inspection {
+    border-color: #FBC02D;
+}

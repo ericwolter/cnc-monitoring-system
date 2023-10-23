@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Machine Status Dashboard</title>
+        <link rel="stylesheet" type="text/css" href="{{ url_for('static', filename='css/normalize.css') }}">
+        <link rel="stylesheet" type="text/css" href="{{ url_for('static', filename='css/style.css') }}">
+    </head>
+    <script src="{{ url_for('static', filename='js/socket.io.js') }}"></script>
+    <body>
+        <h1>Machine Status Dashboard</h1>
+        <div class="machines">
+            {% for machine_id, status in machines_status.items() %}
+                <div class="machine" id="{{ machine_id }}">
+                    <h2>Machine {{ machine_id }}</h2>
+                    <img src="{{ url_for('static', filename='img/unknown.png') }}" alt="{{ status }} Image">
+                    <div class="status-pill">{{ status }}</div>
+                </div>
+            {% endfor %}
+        </div>
+        <script src="{{ url_for('static', filename='js/dashboard.js') }}"></script>
+    </body>
+
+</html>
