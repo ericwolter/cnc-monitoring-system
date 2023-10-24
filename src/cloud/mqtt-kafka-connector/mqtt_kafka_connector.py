@@ -33,9 +33,9 @@ def on_connect(client, userdata, flags, rc):
     client.subscribe(
         [
             (MQTT_STATUS_TOPIC, 0),
-            (f"{MQTT_DATA_TOPIC_PREFIX}/M01/data", 0),
-            (f"{MQTT_DATA_TOPIC_PREFIX}/M02/data", 0),
-            (f"{MQTT_DATA_TOPIC_PREFIX}/M03/data", 0),
+            (f"{MQTT_DATA_TOPIC_PREFIX}/M01/data", 1),
+            (f"{MQTT_DATA_TOPIC_PREFIX}/M02/data", 1),
+            (f"{MQTT_DATA_TOPIC_PREFIX}/M03/data", 1),
         ]
     )
 
@@ -48,9 +48,14 @@ def on_message(client, userdata, message):
         machine_name = message.topic.split("/")[2]
         kafka_topic = f"factory_machine_{machine_name}_data"
 
-    # Send the MQTT message to Kafka
-    producer.produce(kafka_topic, message.payload)
-    producer.flush()  # Ensure that the message gets sent
+    try:
+        # Send the MQTT message to Kafka
+        producer.produce(kafka_topic, message.payload)
+    except Exception as e:
+        logging.error(
+            f"Local producer queue is full ({len(producer)} messages awaiting delivery): try again"
+        )
+        logging.error(f"Error: {e}")
 
 
 if __name__ == "__main__":

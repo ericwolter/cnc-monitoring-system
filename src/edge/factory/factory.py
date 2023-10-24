@@ -45,6 +45,7 @@ def machine_simulation(machine_id):
 
     # Define the frequency
     FREQUENCY_SLEEP_TIME = 1.0 / 2000  # For 2kHz
+    BATCH_SIZE = 2000
     # Define anomaly rate
     TRUE_ANOMALY_RATE = 0.01  # For 1%
     # Define wait times
@@ -83,24 +84,27 @@ def machine_simulation(machine_id):
             client, STATUS_TOPIC, {"machine_id": machine_name, "status": "Running"}
         )
 
-        # Iterate over the vibration data
-        seq = 0
-        for data in vibration_data:
+        # Iterate over the vibration data in batches of 2000 samples
+        for i in range(0, len(vibration_data), BATCH_SIZE):
+            batch_data = vibration_data[i : i + BATCH_SIZE]
             message = {
                 "machine_id": machine_name,
                 "process_id": process_name,
-                "sequence_num": seq,
-                "vibration_data": data.tolist(),  # Directly using the [x, y, z] array
+                "sequence_start": i,
+                "sequence_end": i + len(batch_data) - 1,
+                "vibration_data": [datum.tolist() for datum in batch_data],
             }
 
             publish_mqtt_message(
                 client, f"{DATA_TOPIC_PREFIX}/{machine_name}/data", message
             )
-            seq += 1
-            time.sleep(FREQUENCY_SLEEP_TIME)
+
+            # Adjust sleep time based on the size of the current batch
+            current_batch_sleep_time = FREQUENCY_SLEEP_TIME * len(batch_data)
+            time.sleep(current_batch_sleep_time)
 
         # After data is exhausted, classify using our machine learning model
-        classification_result = evaluate_process_health(data, label)
+        classification_result = evaluate_process_health(vibration_data, label)
 
         publish_mqtt_message(
             client,
