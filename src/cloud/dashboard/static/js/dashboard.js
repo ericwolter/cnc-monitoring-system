@@ -1,3 +1,5 @@
+window.activeMachine = null;
+
 const socket = io.connect('http://' + document.domain + ':' + location.port);
 
 socket.on('factory_machine_status', function (data) {
@@ -10,7 +12,42 @@ socket.on('initial-status', function (data) {
     for (let machine_id in data) {
         updateMachineStatus(machine_id, data[machine_id]);
     }
+    if (window.activeMachine) {
+        toggleMachineData(window.activeMachine);
+    }
 });
+
+function toggleMachineData(machine_id) {
+    let machineElement = document.getElementById(machine_id);
+
+    // Remove 'active' class from all machines
+    let machines = document.querySelectorAll('.machine');
+    machines.forEach(function (machine) {
+        machine.classList.remove('active');
+    });
+
+    if (window.activeMachine && window.activeMachine === machine_id) {
+        window.activeMachine = null;  // If the machine is toggled off, set the activeMachine to null
+    } else {
+        window.activeMachine = machine_id;  // If a new machine is toggled on, set the activeMachine
+        machineElement.classList.add('active');
+    }
+    // Toggle placeholder visibility based on the active machine status
+    togglePlaceholderVisibility();
+
+    socket.emit('toggle-machine-data', { machine_id: machine_id });
+}
+
+function togglePlaceholderVisibility() {
+    let placeholder = document.querySelector('.chart-placeholder');
+
+    // If no chart is visible and there's no active machine, show the placeholder
+    if (!window.activeMachine) {
+        placeholder.style.display = "block";
+    } else {
+        placeholder.style.display = "none";
+    }
+}
 
 function updateMachineStatus(machine_id, status) {
     // Find the specific machine element by its ID
@@ -60,5 +97,180 @@ function updateMachineStatus(machine_id, status) {
                 statusPill.style.backgroundColor = "gray";
                 break;
         }
+
+        if (status === "Starting" && machine_id === window.activeMachine) {
+            vibrationChartX.data.datasets[0].data = [];
+            vibrationChartY.data.datasets[0].data = [];
+            vibrationChartZ.data.datasets[0].data = [];
+            vibrationChartX.update();
+            vibrationChartY.update();
+            vibrationChartZ.update();
+        }
     }
 }
+
+socket.on('start-chart', function () {
+    vibrationChartX.data.datasets[0].data = [];
+    vibrationChartY.data.datasets[0].data = [];
+    vibrationChartZ.data.datasets[0].data = [];
+    vibrationChartX.options.plugins.title.text = 'Vibration X for ' + window.activeMachine;
+    vibrationChartY.options.plugins.title.text = 'Vibration Y for ' + window.activeMachine;
+    vibrationChartZ.options.plugins.title.text = 'Vibration Z for ' + window.activeMachine;
+
+    vibrationChartX.update();
+    vibrationChartY.update();
+    vibrationChartZ.update();
+
+    document.getElementById("vibrationChartX").style.visibility = "visible";
+    document.getElementById("vibrationChartY").style.visibility = "visible";
+    document.getElementById("vibrationChartZ").style.visibility = "visible";
+});
+
+socket.on('stop-chart', function () {
+    vibrationChartX.data.datasets[0].data = [];
+    vibrationChartY.data.datasets[0].data = [];
+    vibrationChartZ.data.datasets[0].data = [];
+
+    document.getElementById("vibrationChartX").style.visibility = "hidden";
+    document.getElementById("vibrationChartY").style.visibility = "hidden";
+    document.getElementById("vibrationChartZ").style.visibility = "hidden";
+});
+
+socket.on('update-chart', function (data) {
+    if (window.activeMachine === null) {
+        socket.emit('toggle-machine-data', { machine_id: data.machine_id });
+    } else {
+        if (data.machine_id !== window.activeMachine) {
+            socket.emit('toggle-machine-data', { machine_id: window.activeMachine });
+        }
+    }
+
+    for (let i = 0; i < data.vibration_data.length; i++) {
+        xyz = data.vibration_data[i];
+        j = data.sequence_start + i
+        vibrationChartX.data.datasets[0].data.push({ x: j, y: xyz[0] });
+        vibrationChartY.data.datasets[0].data.push({ x: j, y: xyz[1] });
+        vibrationChartZ.data.datasets[0].data.push({ x: j, y: xyz[2] });
+    }
+    vibrationChartX.update();
+    vibrationChartY.update();
+    vibrationChartZ.update();
+});
+
+let vibrationChartX = new Chart(document.getElementById("vibrationChartX"), {
+    type: 'line',
+    data: {
+        datasets: [{
+            borderColor: "#07a889",
+            borderWidth: 1,
+            pointRadius: 0, // disable for a single dataset
+            data: []
+        }]
+    }, options: {
+        animation: false,
+        maintainAspectRatio: false,
+        parsing: false,
+        normalized: true,
+        interaction: {
+            intersect: false
+        },
+        scales: {
+            x: {
+                type: 'linear',
+                min: 0,
+                max: 50000,
+            },
+            y: {
+                min: -2500,
+                max: 2500,
+            }
+        },
+        plugins: {
+            legend: {
+                display: false,
+            },
+            title: {
+                display: true,
+                text: 'Vibration Data',
+            }
+        }
+    }
+});
+let vibrationChartY = new Chart(document.getElementById("vibrationChartY"), {
+    type: 'line',
+    data: {
+        datasets: [{
+            borderColor: "#07a889",
+            borderWidth: 1,
+            pointRadius: 0, // disable for a single dataset
+            data: []
+        }]
+    }, options: {
+        animation: false,
+        maintainAspectRatio: false,
+        parsing: false,
+        normalized: true,
+        interaction: {
+            intersect: false
+        },
+        scales: {
+            x: {
+                type: 'linear',
+                min: 0,
+                max: 50000,
+            },
+            y: {
+                min: -2500,
+                max: 2500,
+            }
+        },
+        plugins: {
+            legend: {
+                display: false,
+            },
+            title: {
+                display: true,
+                text: 'Vibration Data',
+            }
+        }
+    }
+});
+let vibrationChartZ = new Chart(document.getElementById("vibrationChartZ"), {
+    type: 'line',
+    data: {
+        datasets: [{
+            borderColor: "#07a889",
+            borderWidth: 1,
+            pointRadius: 0, // disable for a single dataset
+            data: []
+        }]
+    }, options: {
+        animation: false,
+        maintainAspectRatio: false,
+        parsing: false,
+        normalized: true,
+        interaction: {
+            intersect: false
+        },
+        scales: {
+            x: {
+                type: 'linear',
+                min: 0,
+                max: 50000,
+            },
+            y: {
+                min: -2500,
+                max: 2500,
+            }
+        },
+        plugins: {
+            legend: {
+                display: false,
+            },
+            title: {
+                display: true,
+                text: 'Vibration Data',
+            }
+        }
+    }
+});

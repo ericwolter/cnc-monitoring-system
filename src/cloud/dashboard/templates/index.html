@@ -8,16 +8,27 @@
         <link rel="stylesheet" type="text/css" href="{{ url_for('static', filename='css/style.css') }}">
     </head>
     <script src="{{ url_for('static', filename='js/socket.io.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/chart.js') }}"></script>
     <body>
         <h1>Machine Status Dashboard</h1>
         <div class="machines">
             {% for machine_id, status in machines_status.items() %}
-                <div class="machine" id="{{ machine_id }}">
+                <div class="machine" id="{{ machine_id }}" onclick="toggleMachineData('{{ machine_id }}')">
                     <h2>Machine {{ machine_id }}</h2>
                     <img src="{{ url_for('static', filename='img/unknown.png') }}" alt="{{ status }} Image">
                     <div class="status-pill">{{ status }}</div>
                 </div>
             {% endfor %}
+        </div>
+        <div class="chart-placeholder">Please select a machine to view its vibration data.</div>
+        <div class="chart-containerX" style="position: relative; visibility:hidden;">
+            <canvas id="vibrationChartX"></canvas>
+        </div>
+        <div class="chart-containerY" style="position: relative; visibility:hidden;">
+            <canvas id="vibrationChartY"></canvas>
+        </div>
+        <div class="chart-containerZ" style="position: relative; visibility:hidden;">
+            <canvas id="vibrationChartZ"></canvas>
         </div>
         <script src="{{ url_for('static', filename='js/dashboard.js') }}"></script>
     </body>

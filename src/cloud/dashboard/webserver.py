@@ -25,6 +25,8 @@ machines_status = {
     "M03": "Unknown",
 }
 
+current_toggled_machine = None
+
 
 def kafka_consumer():
     try:
@@ -33,12 +35,20 @@ def kafka_consumer():
             "bootstrap.servers": KAFKA_BROKER,
             "group.id": "dashboard-consumer-12345",
             "enable.auto.commit": True,
+            "auto.offset.reset": "latest",
             "logger": "confluent_kafka",
         }
 
         consumer = Consumer(conf)
         logger.info(f"Subscribing to {KAFKA_STATUS_TOPIC} topic")
-        consumer.subscribe([KAFKA_STATUS_TOPIC])
+        consumer.subscribe(
+            [
+                KAFKA_STATUS_TOPIC,
+                "factory_machine_M01_data",
+                "factory_machine_M02_data",
+                "factory_machine_M03_data",
+            ]
+        )
 
         while True:
             message = consumer.poll(0.5)
@@ -55,19 +65,56 @@ def kafka_consumer():
                 else:
                     logger.error(f"Kafka error: {message.error()}")
             else:
-                msg = message.value().decode("utf-8")
-                machine_data = json.loads(msg)
+                if message.topic().startswith(KAFKA_STATUS_TOPIC):
+                    msg = message.value().decode("utf-8")
+                    machine_status = json.loads(msg)
 
-                # Update the machines_status dictionary with the new status
-                machine_id = machine_data["machine_id"]
-                status = machine_data["status"]
-                machines_status[machine_id] = status
+                    logger.info(f"Received machine status: {machine_status}")
 
-                socketio.emit(f"{KAFKA_STATUS_TOPIC}", machine_data)
+                    # Update the machines_status dictionary with the new status
+                    machine_id = machine_status["machine_id"]
+                    status = machine_status["status"]
+                    machines_status[machine_id] = status
+
+                    socketio.emit(f"{KAFKA_STATUS_TOPIC}", machine_status)
+                else:
+                    msg = message.value().decode("utf-8")
+                    machine_data = json.loads(msg)
+                    # Only emit if the machine is currently toggled on
+                    if (
+                        current_toggled_machine
+                        and current_toggled_machine == machine_data["machine_id"]
+                    ):
+                        logger.info(
+                            f"Received vibration data for toggled-on machine {machine_data['machine_id']}"
+                        )
+                        socketio.emit("update-chart", machine_data)
 
     except Exception as e:
         logger.error(f"consumer error: {e}")
         sys.exit(-1)
+
+
+@socketio.on("toggle-machine-data")
+def handle_toggle(data):
+    global current_toggled_machine
+
+    machine_id = data.get("machine_id")
+
+    if not machine_id:
+        logger.error("Received toggle event without machine_id")
+        return
+
+    if machine_id != current_toggled_machine:
+        logger.info(
+            f"Data toggle enabled for machine {machine_id}. Previous toggled machine was {current_toggled_machine}."
+        )
+        current_toggled_machine = machine_id
+        socketio.emit("start-chart")
+    else:
+        logger.info(f"Data toggle disabled for machine {machine_id}.")
+        current_toggled_machine = None
+        socketio.emit("stop-chart")
 
 
 @socketio.on("connect")

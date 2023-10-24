@@ -18,7 +18,7 @@ DATA_TOPIC_PREFIX = "factory/machines"
 STATUS_TOPIC = "factory/machines/status"
 
 
-def evaluate_process_health(vibration_data, label):
+def evaluate_process_health_cautious(vibration_data, label):
     """Machine learning model classification."""
 
     # Classification based on randomness for simplicity
@@ -31,16 +31,58 @@ def evaluate_process_health(vibration_data, label):
     return classification
 
 
+def evaluate_process_health_simple(vibration_data, label):
+    """Machine learning model classification."""
+    return label
+
+
+# This variable will store the current classification method for each machine
+classification_methods = {
+    "M01": evaluate_process_health_cautious,
+    "M02": evaluate_process_health_cautious,
+    "M03": evaluate_process_health_cautious,
+}
+
+
 def publish_mqtt_message(client, topic, payload_dict):
     """Publishes a message to the given MQTT topic in JSON format."""
     json_payload = json.dumps(payload_dict)
     client.publish(topic, json_payload)
 
 
+def on_message(client, userdata, message):
+    """Callback for when a message is received on the control channel."""
+    machine_id = userdata["machine_id"]
+    try:
+        payload = json.loads(message.payload.decode())
+        command = payload.get("command", "")
+        args = payload.get("args", [])
+
+        if command == "switch_classification_method":
+            if args[0] == "simple":
+                classification_methods[machine_id] = evaluate_process_health_simple
+            elif args[0] == "cautious":
+                classification_methods[machine_id] = evaluate_process_health_cautious
+            else:
+                classification_methods[machine_id] = evaluate_process_health_cautious
+    except json.JSONDecodeError:
+        logging.error(f"Invalid JSON received: {message.payload.decode()}")
+
+
 def machine_simulation(machine_id):
     """Simulate a machine producing sensor data and sending it to MQTT broker."""
-    client = mqtt.Client()
+
+    # Define the path to the h5 file
+    machine_name = f"M0{machine_id + 1}"
+    process_name = f"OP07"
+
+    client = mqtt.Client(userdata={"machine_id": machine_name})
     client.connect(BROKER_HOST, BROKER_PORT, 60)
+
+    # Subscribe to the machine's control channel
+    client.subscribe(f"factory/machines/{machine_name}/control")
+    client.on_message = on_message
+
     client.loop_start()
 
     # Define the frequency
@@ -51,10 +93,6 @@ def machine_simulation(machine_id):
     # Define wait times
     MAINTENANCE_TIME = 60  # seconds
     RELOAD_TIME = 10  # seconds
-
-    # Define the path to the h5 file
-    machine_name = f"M0{machine_id + 1}"
-    process_name = f"OP07"
 
     publish_mqtt_message(
         client, STATUS_TOPIC, {"machine_id": machine_name, "status": "Initializing"}
@@ -104,7 +142,9 @@ def machine_simulation(machine_id):
             time.sleep(current_batch_sleep_time)
 
         # After data is exhausted, classify using our machine learning model
-        classification_result = evaluate_process_health(vibration_data, label)
+        classification_result = classification_methods[machine_name](
+            vibration_data, label
+        )
 
         publish_mqtt_message(
             client,
@@ -114,6 +154,9 @@ def machine_simulation(machine_id):
                 "status": "Completed",
                 "label": label,
                 "classification": classification_result,
+                "current_model": classification_methods[
+                    machine_name
+                ].__name__,  # Indicate the current model being used
             },
         )
 

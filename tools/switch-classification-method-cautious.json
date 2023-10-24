@@ -1,0 +1,6 @@
+{
+    "command": "switch_classification_method",
+    "args": [
+        "cautious"
+    ]
+}
