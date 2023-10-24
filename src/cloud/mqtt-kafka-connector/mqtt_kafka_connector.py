@@ -1,10 +1,15 @@
 import logging
 
 import paho.mqtt.client as mqtt
-from kafka import KafkaProducer
+import socket
+from confluent_kafka import Producer
+
+# Set up logging
+logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(message)s")
 
 # Kafka configuration
 KAFKA_BROKER = "kafka:9092"
+KAKFA_CLIENT_ID = socket.gethostname()
 # KAFKA_DATA_TOPIC = "factory-data"
 # KAFKA_STATUS_TOPIC = "factory-status"
 
@@ -14,7 +19,11 @@ MQTT_BROKER_PORT = 1883
 MQTT_DATA_TOPIC_PREFIX = "factory/machines"
 MQTT_STATUS_TOPIC = "factory/machines/status"
 
-producer = KafkaProducer(bootstrap_servers=KAFKA_BROKER)
+logging.info(
+    f"Connecting to Kafka Broker {KAFKA_BROKER} with client.id {KAKFA_CLIENT_ID}..."
+)
+conf = {"bootstrap.servers": KAFKA_BROKER, "client.id": KAKFA_CLIENT_ID}
+producer = Producer(conf)
 
 
 def on_connect(client, userdata, flags, rc):
@@ -40,7 +49,8 @@ def on_message(client, userdata, message):
         kafka_topic = f"factory_machine_{machine_name}_data"
 
     # Send the MQTT message to Kafka
-    producer.send(kafka_topic, message.payload)
+    producer.produce(kafka_topic, message.payload)
+    producer.flush()  # Ensure that the message gets sent
 
 
 if __name__ == "__main__":

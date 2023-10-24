@@ -5,7 +5,7 @@ FROM python:3.10
 WORKDIR /app
 
 # Install the required libraries
-RUN pip install paho-mqtt kafka-python
+RUN pip install paho-mqtt confluent-kafka
 
 # Run factory.py when the container launches
 CMD ["python", "./mqtt_kafka_connector.py"]

@@ -5,7 +5,7 @@ from flask import Flask, render_template
 from flask_socketio import SocketIO
 from confluent_kafka import Consumer, KafkaError
 
-import threading
+import sys
 
 # Constants
 KAFKA_BROKER = "kafka:9092"
@@ -67,6 +67,7 @@ def kafka_consumer():
 
     except Exception as e:
         logger.error(f"consumer error: {e}")
+        sys.exit(-1)
 
 
 @socketio.on("connect")

@@ -48,7 +48,6 @@ def machine_simulation(machine_id):
     # Define anomaly rate
     TRUE_ANOMALY_RATE = 0.01  # For 1%
     # Define wait times
-    INSPECTION_TIME = 20  # seconds
     MAINTENANCE_TIME = 60  # seconds
     RELOAD_TIME = 10  # seconds
 
@@ -80,26 +79,24 @@ def machine_simulation(machine_id):
         with h5py.File(file_path, "r") as hf:
             vibration_data = list(hf["vibration_data"])
 
-        # Initialize timestamp
-        relative_timestamp = 0
-
         publish_mqtt_message(
             client, STATUS_TOPIC, {"machine_id": machine_name, "status": "Running"}
         )
 
         # Iterate over the vibration data
+        seq = 0
         for data in vibration_data:
             message = {
                 "machine_id": machine_name,
                 "process_id": process_name,
-                "timestamp": relative_timestamp,
+                "sequence_num": seq,
                 "vibration_data": data.tolist(),  # Directly using the [x, y, z] array
             }
 
             publish_mqtt_message(
                 client, f"{DATA_TOPIC_PREFIX}/{machine_name}/data", message
             )
-            relative_timestamp += FREQUENCY_SLEEP_TIME
+            seq += 1
             time.sleep(FREQUENCY_SLEEP_TIME)
 
         # After data is exhausted, classify using our machine learning model
