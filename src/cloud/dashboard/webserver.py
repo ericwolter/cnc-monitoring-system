@@ -135,6 +135,6 @@ if __name__ == "__main__":
         logger.info("Starting Kafka consumer...")
         socketio.start_background_task(kafka_consumer)
         logger.info("Starting webserver...")
-        socketio.run(app, host="0.0.0.0", port=5000, allow_unsafe_werkzeug=True)
+        socketio.run(app, host="0.0.0.0", port=5050, allow_unsafe_werkzeug=True)
     except Exception as e:
         logger.error(f"server error: {e}")

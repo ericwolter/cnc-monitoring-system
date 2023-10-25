@@ -92,7 +92,7 @@ def machine_simulation(machine_id):
     TRUE_ANOMALY_RATE = 0.01  # For 1%
     # Define wait times
     MAINTENANCE_TIME = 60  # seconds
-    RELOAD_TIME = 10  # seconds
+    RELOAD_TIME = 5  # seconds
 
     publish_mqtt_message(
         client, STATUS_TOPIC, {"machine_id": machine_name, "status": "Initializing"}
