@@ -13,22 +13,22 @@
         <h1>Machine Status Dashboard</h1>
         <div class="machines">
             {% for machine_id, status in machines_status.items() %}
-                <div class="machine" id="{{ machine_id }}" onclick="toggleMachineData('{{ machine_id }}')">
+                <div class="machine" id="{{ machine_id }}" onclick="if (dashboard) { dashboard.handleMachineSelection('{{ machine_id }}'); }">
                     <h2>Machine {{ machine_id }}</h2>
                     <img src="{{ url_for('static', filename='img/unknown.png') }}" alt="{{ status }} Image">
                     <div class="status-pill">{{ status }}</div>
                 </div>
             {% endfor %}
         </div>
-        <div class="chart-placeholder">Please select a machine to view its vibration data.</div>
-        <div class="chart-containerX" style="position: relative; visibility:hidden;">
-            <canvas id="vibrationChartX"></canvas>
+        <div id="chart-placeholder">Please select a machine to view its vibration data.</div>
+        <div class="chart-container">
+            <canvas id="vibrationChartX" style="visibility:hidden;"></canvas>
         </div>
-        <div class="chart-containerY" style="position: relative; visibility:hidden;">
-            <canvas id="vibrationChartY"></canvas>
+        <div class="chart-container">
+            <canvas id="vibrationChartY" style="visibility:hidden;"></canvas>
         </div>
-        <div class="chart-containerZ" style="position: relative; visibility:hidden;">
-            <canvas id="vibrationChartZ"></canvas>
+        <div class="chart-container">
+            <canvas id="vibrationChartZ" style="visibility:hidden;"></canvas>
         </div>
         <img src="{{ url_for('static', filename='img/logo.png') }}" alt="Logo" class="floating-logo">
         <script src="{{ url_for('static', filename='js/dashboard.js') }}"></script>

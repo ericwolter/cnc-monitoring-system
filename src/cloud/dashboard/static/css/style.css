@@ -8,19 +8,8 @@ h1 {
     font-size: 72px;
 }
 
-.chart-containerX {
-    margin: 0 auto;
-    height: 15vh;
-    width: 80vw;
-}
-
-.chart-containerY {
-    margin: 0 auto;
-    height: 15vh;
-    width: 80vw;
-}
-
-.chart-containerZ {
+.chart-container {
+    position: relative;
     margin: 0 auto;
     height: 15vh;
     width: 80vw;
@@ -62,7 +51,7 @@ h1 {
     box-shadow: rgba(0, 0, 0, 0.16) 0px 1px 4px, #07a889 0px 0px 0px 3px;
 }
 
-.chart-placeholder {
+#chart-placeholder {
     text-align: center;
     font-size: 1.2em;
     margin-top: 20px;
