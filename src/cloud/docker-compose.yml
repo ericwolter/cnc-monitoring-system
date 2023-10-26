@@ -60,6 +60,7 @@ services:
       - mosquitto
     volumes:
       - ../../data:/data
+      - ../../models:/model
       - ../edge/factory:/app
     restart: unless-stopped
 

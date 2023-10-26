@@ -7,6 +7,8 @@ import time
 
 import h5py
 import paho.mqtt.client as mqtt
+import numpy as np
+import onnxruntime
 
 # Set up logging
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(message)s")
@@ -16,6 +18,10 @@ BROKER_HOST = "mosquitto"
 BROKER_PORT = 1883
 DATA_TOPIC_PREFIX = "factory/machines"
 STATUS_TOPIC = "factory/machines/status"
+
+onnx_file_path = "/model/best.onnx"
+ort_session = onnxruntime.InferenceSession(onnx_file_path)
+input_name = ort_session.get_inputs()[0].name
 
 
 def evaluate_process_health_cautious(vibration_data, label):
@@ -36,11 +42,46 @@ def evaluate_process_health_simple(vibration_data, label):
     return label
 
 
+def normalize_data(data):
+    min_value, max_value = -2500.0, 2500.0
+    normalized_data = 2 * ((data - min_value) / (max_value - min_value)) - 1
+    return normalized_data
+
+
+def infer_and_compute_loss(data_normalized):
+    losses = []
+    seq_length = 4000
+    num_chunks = len(data_normalized) // seq_length
+
+    for i in range(num_chunks):
+        chunk = data_normalized[i * seq_length : (i + 1) * seq_length]
+        chunk = chunk.reshape(1, seq_length, 3).astype(np.float32)
+        ort_inputs = {input_name: chunk}
+        ort_outs = ort_session.run(None, ort_inputs)
+        reconstruction = np.array(ort_outs).squeeze()
+        loss = np.mean((reconstruction - chunk) ** 2)
+        losses.append(loss)
+
+    return np.mean(losses)
+
+
+def evaluate_process_health_onnx(vibration_data, label):
+    """Classification using ONNX model."""
+    data_normalized = normalize_data(vibration_data)
+    mse_loss = infer_and_compute_loss(data_normalized)
+
+    # You can set a threshold for classification
+    # For example, if mse_loss > threshold classify as "bad" else "good"
+    # This threshold can be determined using your training/validation data
+    threshold = 0.01392  # Empirically determined threshold
+    return "bad" if mse_loss > threshold else "good"
+
+
 # This variable will store the current classification method for each machine
 classification_methods = {
-    "M01": evaluate_process_health_cautious,
-    "M02": evaluate_process_health_cautious,
-    "M03": evaluate_process_health_cautious,
+    "M01": evaluate_process_health_onnx,
+    "M02": evaluate_process_health_onnx,
+    "M03": evaluate_process_health_onnx,
 }
 
 
@@ -63,6 +104,8 @@ def on_message(client, userdata, message):
                 classification_methods[machine_id] = evaluate_process_health_simple
             elif args[0] == "cautious":
                 classification_methods[machine_id] = evaluate_process_health_cautious
+            elif args[0] == "onnx":
+                classification_methods[machine_id] = evaluate_process_health_onnx
             else:
                 classification_methods[machine_id] = evaluate_process_health_cautious
     except json.JSONDecodeError:
@@ -116,7 +159,7 @@ def machine_simulation(machine_id):
 
         # Read data from h5 file
         with h5py.File(file_path, "r") as hf:
-            vibration_data = list(hf["vibration_data"])
+            vibration_data = hf["vibration_data"][:]
 
         publish_mqtt_message(
             client, STATUS_TOPIC, {"machine_id": machine_name, "status": "Running"}
