@@ -1,3 +1,4 @@
 mlruns/
 lightning_logs/
 MNIST/
+onnx_models/
