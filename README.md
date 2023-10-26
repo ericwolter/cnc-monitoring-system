@@ -66,4 +66,6 @@ Helper scripts for managing the system are under `tools/`
 
 ## License
 
-This system is licensed under the [MIT license](LICENSE). Data is licensed under the [CC BY 4.0](data/License.txt) license.
+The source code in this repository is licensed under the [MIT license](LICENSE). 
+
+The data under `data/` is licensed under the [BSD 3-Clause](data/License.txt) license.
