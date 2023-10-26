@@ -13,218 +13,270 @@ import onnxruntime
 # Set up logging
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(message)s")
 
-# MQTT broker configuration
-BROKER_HOST = "mosquitto"
-BROKER_PORT = 1883
-DATA_TOPIC_PREFIX = "factory/machines"
-STATUS_TOPIC = "factory/machines/status"
-
-onnx_file_path = "/model/best.onnx"
-ort_session = onnxruntime.InferenceSession(onnx_file_path)
-input_name = ort_session.get_inputs()[0].name
+# ONNX configuration
+ONNX_FILE_PATH = "/model/best.onnx"
+ONNX_ORT_SESSION = onnxruntime.InferenceSession(ONNX_FILE_PATH)
+ONNX_INPUT_NAME = ONNX_ORT_SESSION.get_inputs()[0].name
 
 
-def evaluate_process_health_cautious(vibration_data, label):
-    """Machine learning model classification."""
+class ONNXModelEvaluator:
+    """Class to handle ONNX model operations and evaluations."""
 
-    # Classification based on randomness for simplicity
-    if label == "bad":
-        return "bad"
-    # i.e. 50% of true good cases are also treated as bad
-    # i.e. wasteful overly cautious classifer
-    classification = "bad" if random.random() < 0.5 else "good"
+    MIN_VALUE = -2500.0
+    MAX_VALUE = 2500.0
+    SEQ_LENGTH = 4000
+    THRESHOLD = 0.01392  # Empirically determined threshold
 
-    return classification
+    @staticmethod
+    def normalize_data(data):
+        """Normalize the provided data."""
+        normalized_data = (
+            2
+            * (
+                (data - ONNXModelEvaluator.MIN_VALUE)
+                / (ONNXModelEvaluator.MAX_VALUE - ONNXModelEvaluator.MIN_VALUE)
+            )
+            - 1
+        )
+        return normalized_data
+
+    @staticmethod
+    def infer_and_compute_loss(data_normalized):
+        """Use the ONNX model to infer and compute the loss."""
+        losses = []
+        num_chunks = len(data_normalized) // ONNXModelEvaluator.SEQ_LENGTH
+
+        for i in range(num_chunks):
+            chunk = data_normalized[
+                i
+                * ONNXModelEvaluator.SEQ_LENGTH : (i + 1)
+                * ONNXModelEvaluator.SEQ_LENGTH
+            ]
+            chunk = chunk.reshape(1, ONNXModelEvaluator.SEQ_LENGTH, 3).astype(
+                np.float32
+            )
+            ort_inputs = {ONNX_INPUT_NAME: chunk}
+            ort_outs = ONNX_ORT_SESSION.run(None, ort_inputs)
+            reconstruction = np.array(ort_outs).squeeze()
+            loss = np.mean((reconstruction - chunk) ** 2)
+            losses.append(loss)
+
+        return np.mean(losses)
+
+    @classmethod
+    def evaluate(cls, vibration_data):
+        """
+        ONNX Evaluation Strategy:
+        Uses a trained ONNX model to evaluate the vibration data and determine the health of the process.
+        The model determines the quality based on the mean squared error (MSE) between the original and reconstructed data.
+        """
+        data_normalized = cls.normalize_data(vibration_data)
+        mse_loss = cls.infer_and_compute_loss(data_normalized)
+        return "bad" if mse_loss > cls.THRESHOLD else "good"
 
 
-def evaluate_process_health_simple(vibration_data, label):
-    """Machine learning model classification."""
+def simple_evaluation(label):
+    """
+    Simple Evaluation Strategy:
+    Directly returns the label without any additional processing.
+    This strategy simulates a naive approach where the system blindly trusts the input label.
+    """
     return label
 
 
-def normalize_data(data):
-    min_value, max_value = -2500.0, 2500.0
-    normalized_data = 2 * ((data - min_value) / (max_value - min_value)) - 1
-    return normalized_data
+def cautious_evaluation(label):
+    """
+    Cautious Evaluation Strategy:
+    If the label is "bad", it immediately returns "bad".
+    For a "good" label, there's a 50% chance it might still classify it as "bad".
+    This strategy simulates an overly cautious system that tends to over-classify good processes as potentially bad.
+    """
+    return "bad" if label == "bad" or random.random() < 0.5 else "good"
 
 
-def infer_and_compute_loss(data_normalized):
-    losses = []
-    seq_length = 4000
-    num_chunks = len(data_normalized) // seq_length
+def evaluate_process_health(vibration_data, label, strategy="onnx"):
+    """
+    Unified function to evaluate process health based on a chosen strategy.
 
-    for i in range(num_chunks):
-        chunk = data_normalized[i * seq_length : (i + 1) * seq_length]
-        chunk = chunk.reshape(1, seq_length, 3).astype(np.float32)
-        ort_inputs = {input_name: chunk}
-        ort_outs = ort_session.run(None, ort_inputs)
-        reconstruction = np.array(ort_outs).squeeze()
-        loss = np.mean((reconstruction - chunk) ** 2)
-        losses.append(loss)
+    Args:
+    - vibration_data: The input data used for evaluation (especially relevant for ONNX evaluation).
+    - label: The true label of the process (either "good" or "bad").
+    - strategy: The evaluation strategy to be used ("simple", "cautious", or "onnx").
 
-    return np.mean(losses)
-
-
-def evaluate_process_health_onnx(vibration_data, label):
-    """Classification using ONNX model."""
-    data_normalized = normalize_data(vibration_data)
-    mse_loss = infer_and_compute_loss(data_normalized)
-
-    # You can set a threshold for classification
-    # For example, if mse_loss > threshold classify as "bad" else "good"
-    # This threshold can be determined using your training/validation data
-    threshold = 0.01392  # Empirically determined threshold
-    return "bad" if mse_loss > threshold else "good"
+    Returns:
+    - The evaluation result based on the chosen strategy.
+    """
+    if strategy == "simple":
+        return simple_evaluation(label)
+    elif strategy == "cautious":
+        return cautious_evaluation(label)
+    elif strategy == "onnx":
+        return ONNXModelEvaluator.evaluate(vibration_data)
+    else:
+        # Default to cautious strategy if an unknown strategy is provided
+        return cautious_evaluation(label)
 
 
-# This variable will store the current classification method for each machine
-classification_methods = {
-    "M01": evaluate_process_health_onnx,
-    "M02": evaluate_process_health_onnx,
-    "M03": evaluate_process_health_onnx,
-}
+class MachineSimulator:
+    # MQTT broker connection details for publishing and subscribing to messages.
+    MQTT_BROKER_HOST = "mosquitto"  # Hostname or IP address of the MQTT broker.
+    MQTT_BROKER_PORT = 1883  # Port number the MQTT broker is listening on.
 
-
-def publish_mqtt_message(client, topic, payload_dict):
-    """Publishes a message to the given MQTT topic in JSON format."""
-    json_payload = json.dumps(payload_dict)
-    client.publish(topic, json_payload)
-
-
-def on_message(client, userdata, message):
-    """Callback for when a message is received on the control channel."""
-    machine_id = userdata["machine_id"]
-    try:
-        payload = json.loads(message.payload.decode())
-        command = payload.get("command", "")
-        args = payload.get("args", [])
-
-        if command == "switch_classification_method":
-            if args[0] == "simple":
-                classification_methods[machine_id] = evaluate_process_health_simple
-            elif args[0] == "cautious":
-                classification_methods[machine_id] = evaluate_process_health_cautious
-            elif args[0] == "onnx":
-                classification_methods[machine_id] = evaluate_process_health_onnx
-            else:
-                classification_methods[machine_id] = evaluate_process_health_cautious
-    except json.JSONDecodeError:
-        logging.error(f"Invalid JSON received: {message.payload.decode()}")
-
-
-def machine_simulation(machine_id):
-    """Simulate a machine producing sensor data and sending it to MQTT broker."""
-
-    # Define the path to the h5 file
-    machine_name = f"M0{machine_id + 1}"
-    process_name = f"OP07"
-
-    client = mqtt.Client(userdata={"machine_id": machine_name})
-    client.connect(BROKER_HOST, BROKER_PORT, 60)
-
-    # Subscribe to the machine's control channel
-    client.subscribe(f"factory/machines/{machine_name}/control")
-    client.on_message = on_message
-
-    client.loop_start()
-
-    # Define the frequency
-    FREQUENCY_SLEEP_TIME = 1.0 / 2000  # For 2kHz
-    BATCH_SIZE = 2000
-    # Define anomaly rate
-    TRUE_ANOMALY_RATE = 0.01  # For 1%
-    # Define wait times
-    MAINTENANCE_TIME = 60  # seconds
-    RELOAD_TIME = 5  # seconds
-
-    publish_mqtt_message(
-        client, STATUS_TOPIC, {"machine_id": machine_name, "status": "Initializing"}
+    # MQTT topic strings for publishing machine data and status updates.
+    DATA_TOPIC_PREFIX = (
+        "factory/machines"  # Main topic where machine data is published.
     )
+    STATUS_TOPIC = "factory/machines/status"  # Main topic where machine status updates are published.
 
-    while True:
-        publish_mqtt_message(
-            client, STATUS_TOPIC, {"machine_id": machine_name, "status": "Starting"}
+    # Rate at which anomalies (or "bad" runs) occur in the simulation.
+    TRUE_ANOMALY_RATE = 0.01  # 1% anomaly rate.
+
+    # The underlying vibration data is captured at a frequency of 2kHz.
+    FREQUENCY_SLEEP_TIME = 1.0 / 2000
+    # Number of data points in each published batch.
+    BATCH_SIZE = 2000
+
+    # Duration constants for various machine states.
+    MAINTENANCE_TIME = (
+        60  # Duration (in seconds) the machine goes into maintenance after a "bad" run.
+    )
+    RELOAD_TIME = 5  # Duration (in seconds) the machine takes to reload after completing a run or maintenance.
+
+    def __init__(self, machine_id, process_name="OP07"):
+        """Initialize the machine simulator with machine ID and process name."""
+        self.machine_id = machine_id
+        self.machine_name = f"M0{machine_id + 1}"
+        self.process_name = process_name
+
+        self.classification_strategy = "onnx"
+
+        self.client = self._initialize_mqtt_client(
+            self.MQTT_BROKER_HOST, self.MQTT_BROKER_PORT
         )
 
-        # Decide between good and bad run based on anomaly rate
-        label = "bad" if random.random() < TRUE_ANOMALY_RATE else "good"
+    def simulate(self):
+        """Simulate the machine process by publishing data and updating status."""
+        self._publish_status_message(
+            {"machine_id": self.machine_name, "status": "Initializing"}
+        )
 
-        # Get all available runs under the chosen label
-        run_dir = f"/data/{machine_name}/{process_name}/{label}"
+        while True:
+            self._publish_status_message(
+                {"machine_id": self.machine_name, "status": "Starting"}
+            )
+
+            label = "bad" if random.random() < self.TRUE_ANOMALY_RATE else "good"
+            file_path = self._select_run(label)
+            vibration_data = self._read_vibration_data(file_path)
+
+            self._publish_status_message(
+                {"machine_id": self.machine_name, "status": "Running"}
+            )
+
+            self._publish_vibration_data(vibration_data)
+            self._classify_and_update_status(vibration_data, label)
+
+            self._publish_status_message(
+                {"machine_id": self.machine_name, "status": "Reloading"}
+            )
+            time.sleep(self.RELOAD_TIME)
+
+    def _initialize_mqtt_client(self, host, port):
+        """Initialize and return the MQTT client for the given machine."""
+        client = mqtt.Client(userdata={"machine_id": self.machine_name})
+        client.connect(host, port, 60)
+        client.subscribe(f"factory/machines/{self.machine_name}/control")
+        client.on_message = self._on_message
+        client.loop_start()
+        return client
+
+    def _on_message(self, client, userdata, message):
+        """Callback for when a message is received on the control channel."""
+        try:
+            payload = json.loads(message.payload.decode())
+            command = payload.get("command", "")
+            args = payload.get("args", [])
+
+            if command == "switch_classification_method":
+                # Update the classification strategy based on the received command
+                self.classification_strategy = args[0]
+
+        except json.JSONDecodeError:
+            logging.error(f"Invalid JSON received: {message.payload.decode()}")
+
+    def _publish_status_message(self, payload):
+        """Publish a status update to the MQTT broker."""
+        self._publish_mqtt_message(self.STATUS_TOPIC, payload)
+
+    def _publish_data_message(self, payload):
+        """Publish vibration data to the MQTT broker."""
+        topic = f"{self.DATA_TOPIC_PREFIX}/{self.machine_name}/data"
+        self._publish_mqtt_message(topic, payload)
+
+    def _publish_mqtt_message(self, topic, payload):
+        """Publish a message to the given MQTT topic in JSON format."""
+        json_payload = json.dumps(payload)
+        self.client.publish(topic, json_payload)
+
+    def _select_run(self, label):
+        """Select and return a random run file path based on the given label."""
+        run_dir = f"/data/{self.machine_name}/{self.process_name}/{label}"
         available_runs = [file for file in os.listdir(run_dir) if file.endswith(".h5")]
-
-        # Randomly pick one run from the available runs
         chosen_run = random.choice(available_runs)
-        file_path = os.path.join(run_dir, chosen_run)
+        return os.path.join(run_dir, chosen_run)
 
-        # Read data from h5 file
+    def _read_vibration_data(self, file_path):
+        """Read and return vibration data from the given .h5 file."""
         with h5py.File(file_path, "r") as hf:
-            vibration_data = hf["vibration_data"][:]
+            return hf["vibration_data"][:]
 
-        publish_mqtt_message(
-            client, STATUS_TOPIC, {"machine_id": machine_name, "status": "Running"}
-        )
-
-        # Iterate over the vibration data in batches of 2000 samples
-        for i in range(0, len(vibration_data), BATCH_SIZE):
-            batch_data = vibration_data[i : i + BATCH_SIZE]
+    def _publish_vibration_data(self, vibration_data):
+        """Publish vibration data in batches to the MQTT broker."""
+        for i in range(0, len(vibration_data), self.BATCH_SIZE):
+            batch_data = vibration_data[i : i + self.BATCH_SIZE]
             message = {
-                "machine_id": machine_name,
-                "process_id": process_name,
+                "machine_id": self.machine_name,
+                "process_id": self.process_name,
                 "sequence_start": i,
                 "sequence_end": i + len(batch_data) - 1,
                 "vibration_data": [datum.tolist() for datum in batch_data],
             }
+            self._publish_data_message(message)
 
-            publish_mqtt_message(
-                client, f"{DATA_TOPIC_PREFIX}/{machine_name}/data", message
-            )
-
-            # Adjust sleep time based on the size of the current batch
-            current_batch_sleep_time = FREQUENCY_SLEEP_TIME * len(batch_data)
+            current_batch_sleep_time = self.FREQUENCY_SLEEP_TIME * len(batch_data)
             time.sleep(current_batch_sleep_time)
 
-        # After data is exhausted, classify using our machine learning model
-        classification_result = classification_methods[machine_name](
-            vibration_data, label
+    def _classify_and_update_status(self, vibration_data, label):
+        """Classify the machine's state and publish status updates."""
+        classification_result = evaluate_process_health(
+            vibration_data, label, self.classification_strategy
         )
-
-        publish_mqtt_message(
-            client,
-            STATUS_TOPIC,
+        self._publish_status_message(
             {
-                "machine_id": machine_name,
+                "machine_id": self.machine_name,
                 "status": "Completed",
                 "label": label,
                 "classification": classification_result,
-                "current_model": classification_methods[
-                    machine_name
-                ].__name__,  # Indicate the current model being used
+                "current_model": self.classification_strategy,
             },
         )
-
         if classification_result == "bad":
-            publish_mqtt_message(
-                client,
-                STATUS_TOPIC,
-                {"machine_id": machine_name, "status": "Maintenance"},
+            self._publish_status_message(
+                {"machine_id": self.machine_name, "status": "Maintenance"}
             )
-            time.sleep(MAINTENANCE_TIME)
+            time.sleep(self.MAINTENANCE_TIME)
 
-        publish_mqtt_message(
-            client, STATUS_TOPIC, {"machine_id": machine_name, "status": "Reloading"}
-        )
-        time.sleep(RELOAD_TIME)
+
+def start_machine_simulation(machine_id):
+    simulator = MachineSimulator(machine_id)
+    simulator.simulate()
 
 
 if __name__ == "__main__":
     logging.info("Starting factory simulation...")
 
     # Start multiple machine simulations
-    machines = [
-        multiprocessing.Process(target=machine_simulation, args=(i,)) for i in range(3)
-    ]
-    for machine in machines:
-        machine.start()
+    for i in range(3):
+        multiprocessing.Process(target=start_machine_simulation, args=(i,)).start()
 
     logging.info("Factory simulation running...")
