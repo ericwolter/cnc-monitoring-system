@@ -36,7 +36,6 @@ def kafka_consumer():
             "group.id": "dashboard-consumer-12345",
             "enable.auto.commit": True,
             "auto.offset.reset": "latest",
-            "logger": "confluent_kafka",
         }
 
         consumer = Consumer(conf)
@@ -64,6 +63,7 @@ def kafka_consumer():
                     )
                 else:
                     logger.error(f"Kafka error: {message.error()}")
+                    sys.exit(-2)
             else:
                 if message.topic().startswith(KAFKA_STATUS_TOPIC):
                     msg = message.value().decode("utf-8")
