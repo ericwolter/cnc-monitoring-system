@@ -35,8 +35,7 @@ services:
     image: eclipse-mosquitto:2.0.18
     container_name: mosquitto
     ports:
-      - "1883:1883" # Non-TLS MQTT
-      - "9001:9001" # WebSockets (if you plan to use it later)
+      - "1883:1883"
     volumes:
       - ./mosquitto/config:/mosquitto/config
       - ./mosquitto/data:/mosquitto/data
