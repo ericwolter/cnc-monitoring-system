@@ -26,6 +26,15 @@ h1 {
     width: 80vw;
 }
 
+.floating-logo {
+    position: fixed;
+    bottom: 2%;
+    right: 2%;
+    width: 200px;
+    height: auto;
+    z-index: 1000;
+}
+
 
 /* Tiled view with flexbox */
 .machines {
