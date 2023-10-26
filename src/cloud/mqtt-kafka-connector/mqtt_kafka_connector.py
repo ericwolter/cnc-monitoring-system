@@ -7,6 +7,8 @@ import paho.mqtt.client as mqtt
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
 )
+logger = logging.getLogger(__name__)
+
 
 # Constants
 KAFKA_BROKER = "kafka:9092"

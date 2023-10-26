@@ -14,6 +14,8 @@ import onnxruntime
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
 )
+logger = logging.getLogger(__name__)
+
 
 # ONNX configuration
 ONNX_FILE_PATH = "/model/best.onnx"
